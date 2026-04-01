@@ -1,4 +1,4 @@
-# Efficient Brain Lesion Estimation
+# SpatialGeneralizedLM
 This repository implements efficient spatial statistical models for brain lesion analysis, including Kronecker-structured spatial GLMs, mass-univariate regression, and robust sandwich-based inference — designed to scale to UK Biobank-sized datasets without materialising the full design matrix.
 
 ## Methods & Algorithms
