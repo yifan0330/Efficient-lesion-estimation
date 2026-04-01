@@ -1,24 +1,42 @@
-from bspline import B_spline_bases
-from model import SpatialBrainLesionModel, MassUnivariateRegression
+"""Regression fitting for spatial brain-lesion models.
+
+Provides two classes:
+  * BrainRegression_full      – PyTorch-based L-BFGS optimisation
+  * BrainRegression_Approximate – Closed-form / iterative NumPy solver
+"""
+
+import logging
+import os
+import time
+
 import numpy as np
 import scipy
-from scipy.optimize import minimize, line_search
-from util import fit_multiplicative_log_glm, fit_MUM_log_glm, SpatialGLM_compute_mu_mean, SpatialGLM_compute_P_mean
-from tqdm import tqdm
+from scipy.optimize import minimize
 import torch
-import logging
-import time
-import os
+from tqdm import tqdm
 
-class BrainRegression_full(object):
+from bspline import B_spline_bases
+from model import SpatialBrainLesionModel, MassUnivariateRegression
+from util import (
+    fit_multiplicative_log_glm,
+    fit_MUM_log_glm,
+    SpatialGLM_compute_mu_mean,
+    SpatialGLM_compute_P_mean,
+)
+
+logger = logging.getLogger(__name__)
+
+class BrainRegression_full:
+    """Full-data regression via PyTorch L-BFGS optimisation."""
 
     def __init__(self, dtype=torch.float64, device='cpu'):
+        """Initialise with computation dtype and device."""
         self.dtype = dtype
         self.device = device
         self._kwargs = {"dtype": self.dtype, "device": self.device}
 
     def load_data(self, data):
-        n_subjects = data["Y"].shape
+        """Load and prepare data tensors (Y, B with intercept, Z with intercept)."""
         # load MU, X, Y, Z
         if "MU" in data and data["MU"] is not None:
             self.MU = torch.tensor(data["MU"], **self._kwargs)
@@ -34,7 +52,7 @@ class BrainRegression_full(object):
         self.n_voxels, self.n_bases = self.B.shape
 
     def init_model(self, model_name, **kwargs):
-        self.model = dict()
+        """Instantiate the specified model with the given keyword arguments."""
         if model_name == "SpatialBrainLesion":
             self.model = SpatialBrainLesionModel(n_covariates=self.n_covariates, 
                                                 n_auxiliary=kwargs["n_auxiliary"], 
@@ -63,7 +81,7 @@ class BrainRegression_full(object):
     
     def optimize_model(self, lr, iter, tolerance_change, tolerance_grad=1e-7, 
                        history_size=100, line_search_fn="strong_wolfe"):
-        # optimization 
+        """Run L-BFGS optimisation on the loaded model and data."""
         start_time = time.time()
         # Initialize iteration counter
         self.iteration = 0
@@ -76,55 +94,36 @@ class BrainRegression_full(object):
                                             history_size=history_size, 
                                             line_search_fn=line_search_fn)
 
-        # optimizer = torch.optim.SGD(params=self.model.parameters(), 
-        #                                 lr=1,
-        #                                 weight_decay=1e-5)
         def closure():
             optimizer.zero_grad()
             preds = self.model(self.B, self.Y, self.Z)
             loss = self.model.get_loss(preds, self.Y, self.Z)
-            print(f"Iteration {self.iteration}: Loss: {loss.item()}")
+            logger.info("Iteration %d: Loss: %.6f", self.iteration, loss.item())
             self.iteration += 1
             loss.backward()
             return loss
         optimizer.step(closure)
 
-        # # SGD optimization loop
-        # for i in range(int(iter)):
-        #     optimizer.zero_grad()
-        #     preds = self.model(self.B, self.Y, self.Z)
-        #     loss = self.model.get_loss(preds, self.Y, self.Z)
-        #     print(f"Iteration {self.iteration}: Loss: {loss.item()}")
-        #     self.iteration += 1
-        #     loss.backward()
-        #     optimizer.step()
-            
-        #     # Optional: check for convergence
-        #     if i > 0 and abs(prev_loss - loss.item()) < tolerance_change:
-        #         print(f"Converged at iteration {i}")
-        #         break
-        #     prev_loss = loss.item()
-        print(f"Time taken for optimization: {time.time() - start_time} seconds")
+        logger.info("Optimisation took %.1f s", time.time() - start_time)
         return
     
-class BrainRegression_Approximate(object):
+class BrainRegression_Approximate:
+    """Approximate regression using closed-form / iterative NumPy solvers."""
 
     def __init__(self, simulated_dset, dtype=torch.float64, device='cpu'):
+        """Initialise with dataset flag, dtype, and device."""
         self.simulated_dset = simulated_dset
         self.dtype = dtype
         self.device = device  
 
     def load_data(self, data, model):
-        # load MU, X, Y, Z
+        """Load and prepare data arrays (Y, B with intercept, Z with intercept)."""
         B, Z = data["X_spatial"], data["Z"]
         B = B.astype(np.float64)
-        # if model == "SpatialBrainLesion":
         B = B * 50 / B.shape[0]
         Z = Z * 50 / Z.shape[0]
-        # self.B = B
         self.B = np.concatenate([B, np.ones((B.shape[0], 1))], axis=1)
         self.Y = data["Y"]
-        # self.Z = Z
         self.Z = np.concatenate([Z, np.ones((Z.shape[0], 1))], axis=1)
         # Dimensions
         self._M, self._R = self.Z.shape
@@ -142,6 +141,7 @@ class BrainRegression_Approximate(object):
                        nll_mode: int = "dask",
                        block_size: int = 10000, 
                        compute_nll: bool = False):
+        """Fit the regression model and return estimated coefficients."""
         start = time.time()
         if model == "SpatialBrainLesion":
             beta = fit_multiplicative_log_glm(
@@ -160,10 +160,11 @@ class BrainRegression_Approximate(object):
                 compute_nll=compute_nll)
         else:
             raise ValueError(f"Model {model} not implemented")
-        print(f"Time: {time.time() - start}")
+        logger.info("Regression completed in %.1f s", time.time() - start)
         return beta
 
     def goodness_of_fit(self, beta, model, mode="dask", block_size=100):
+        """Compute goodness-of-fit statistics (mean/std of MU, mean of P)."""
         if model == "SpatialBrainLesion":
             MU_mean, MU_std = SpatialGLM_compute_mu_mean(self.Z, self.B, beta, mode=mode, block_size=block_size)
             P_mean = SpatialGLM_compute_P_mean(self.Z, self.B, beta, mode=mode, block_size=block_size)
