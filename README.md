@@ -17,12 +17,25 @@ This repository contains code and experiments for brain lesion analysis using sp
 
 ## Requirements
 
-- Python 3.x
-- PyTorch
-- NumPy, SciPy
-- Nibabel (for neuroimaging data)
-- Nilearn
-- Dask (for distributed computing)
+- Python ≥ 3.11
+
+All dependencies are declared in `pyproject.toml` and pinned in `uv.lock`.
+
+### Setup with uv
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/) if you haven't already:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then create a virtual environment and install all dependencies in one step:
+
+```bash
+uv sync
+```
+
+This reads `uv.lock` and installs the exact same package versions used during development.
 
 ## Usage
 
