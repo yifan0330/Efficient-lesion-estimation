@@ -1,0 +1,71 @@
+# Large data files and results
+*.npz
+*.npy
+*.nii
+*.nii.gz
+*.dat
+*.csv
+*.tsv
+*.img
+*.hdr
+
+# Results and output directories
+results/
+inference/
+data/
+figures/
+probability_function/
+
+# Bash/shell scripts
+*.sh
+
+# Python cache and temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VS Code settings (optional - you can remove this if you want to share VS Code settings)
+.vscode/
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+tmp.*
+*.temp
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment files
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE files
+.idea/
+*.swp
+*.swo
+*~
+
+# Backup files
+*.bak
+*.backup
